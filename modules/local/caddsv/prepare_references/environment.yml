@@ -1,0 +1,6 @@
+channels:
+- conda-forge
+- bioconda
+dependencies:
+- conda-forge::tar=1.35
+- conda-forge::wget=1.25.0
