@@ -7,5 +7,5 @@ cd "$(dirname "$0")"
 
 nextflow run test_download.nf \
     -profile singularity \
-    --caddsv_cache_dir ./caddsv_references \
+    --caddsv_cache_dir ./results/caddsv_references \
     -resume
