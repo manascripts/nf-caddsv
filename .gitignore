@@ -2,4 +2,8 @@
 .nextflow.log*
 work/
 results/
+test/
 .DS_Store
+*.smk
+*.sh
+_download.nf

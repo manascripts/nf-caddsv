@@ -21,6 +21,5 @@ nextflow run main.nf \
     --input test/data/test_svs.bed \
     --annotations_dir ./results/caddsv_references/annotations \
     --models_dir ./results/caddsv_references/models \
-    --outdir test/results \
-    -resume
+    --outdir test/results
 

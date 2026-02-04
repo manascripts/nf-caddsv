@@ -28,14 +28,15 @@ workflow {
             .fromPath(params.input, checkIfExists: true)
             .splitCsv(header: true)
             .map { row ->
-                if( !row.sample ) error "Samplesheet is missing required column: sample"
-                if( !row.bed )    error "Samplesheet is missing required column: bed"
-                tuple( [ id: row.sample.toString() ], file(row.bed.toString(), checkIfExists: true) )
+                def meta = [id: row.sample]
+                def bed = file(row.bed, checkIfExists: true)
+                tuple(meta, bed)
             }
         : Channel
             .fromPath(params.input, checkIfExists: true)
             .map { bed ->
-                tuple( [ id: bed.baseName ], bed )
+                def meta = [id: bed.baseName.replaceAll(/\\.bed\$/, '')]
+                tuple(meta, bed)
             }
 
     // Reference channels
@@ -45,14 +46,15 @@ workflow {
     ch_genome      = Channel.fromPath("${projectDir}/assets/caddsv/hg38.genome", checkIfExists: true).first()
 
     // annotation header expected by score step
-    ch_header      = Channel.fromPath("${projectDir}/assets/caddsv/annotation_header.txt", checkIfExists: true).first()
+    ch_header = params.annotations_dir 
+        ? Channel.fromPath("${params.annotations_dir}/header.txt", checkIfExists: true).first()
+        : Channel.fromPath("${projectDir}/assets/caddsv/annotation_header.txt", checkIfExists: true).first()
 
     CADDSV(
         ch_sv_bed,
         ch_annotations,
         ch_models,
         ch_scripts,
-        ch_genome,
-        ch_header
+        ch_genome
     )
 }

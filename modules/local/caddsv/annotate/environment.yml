@@ -1,12 +1,12 @@
 name: caddsv_annotate
 channels:
-  - conda-forge
-  - bioconda
+- conda-forge
+- bioconda
 dependencies:
-  - bedtools>=2.30.0
-  - htslib>=1.15
-  - tabix>=1.11
-  - samtools>=1.15
-  - python>=3.9
-  - pandas>=2.0
-  - numpy>=1.24
+- bioconda::bedops=2.4.42
+- bioconda::bedtools=2.31.1
+- bioconda::htslib=1.23
+- bioconda::samtools=1.23
+- conda-forge::r-base=4.4.2
+- conda-forge::r-data.table=1.17.8
+- conda-forge::r-randomforest=4.7_1.2

@@ -1,5 +1,0 @@
-name: caddsv_assemble
-channels:
-  - conda-forge
-dependencies:
-  - coreutils

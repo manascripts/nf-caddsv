@@ -1,6 +1,13 @@
 /*
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
     CADDSV_SCORE - Score SVs using Random Forest models (R, faithful to Snakemake)
+    CRITICAL: Snakemake rule scoring (line 1067-1079) has counter-intuitive naming:
+      input:
+        span = matrix.bed
+        flank_up = matrix_100bpdown.bed      # Uses DOWN matrix for UP context
+        flank_down = matrix_100bpup.bed      # Uses UP matrix for DOWN context
+    
+    This is scientifically intentional - maintain exact Snakemake order.
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 */
 
@@ -10,79 +17,72 @@ process CADDSV_SCORE {
 
     conda "${moduleDir}/environment.yml"
     container "${ workflow.containerEngine == 'singularity' && !task.ext.singularity_pull_docker_container ?
-        'https://community-cr-prod.seqera.io/docker/registry/v2/blobs/sha256/8e/8eb87e70b56d92de45cca178ca4abf4694170f88dc434c1851473ae1dfaf2e1b/data' :
-        'community.wave.seqera.io/library/r-base_r-data.table_r-dplyr_r-optparse_pruned:17b521e080857155' }"
+        'https://community-cr-prod.seqera.io/docker/registry/v2/blobs/sha256/a3/a3518b248237cdea316a05907915a81fa26d6999c5cf03ad9fde4f8f1536e13b/data' :
+        'community.wave.seqera.io/library/bedtools_r-base_r-data.table_r-optparse_pruned:c587fff83c849578' }"
     
     input:
-    tuple val(meta), path(idbed), path(matrix_main), path(matrix_up), path(matrix_down)
+    tuple val(meta), 
+        path(original_bed), 
+        path(matrix_main), 
+        path(matrix_up), path(matrix_down)
     path models_dir
     path scripts_dir
     path genome_file
+    path annotations_dir, stageAs: 'annotations'
 
     output:
-    tuple val(meta), path("${meta.id}_score.bed")      , emit: score
-    tuple val(meta), path("${meta.id}_score_phred.bed"), emit: score_phred
-    path "versions.yml"                                , emit: versions
+    tuple val(meta), path("${meta.id}_score.bed"), emit: score
+    path "versions.yml"                          , emit: versions
+
+    when:
+    task.ext.when == null || task.ext.when
 
     script:
-    def name    = meta.id
-    def threads = task.cpus ?: 1
-
+    def name = meta.id
     """
-    #!/bin/bash
-    set -euo pipefail
+    mkdir -p input output "${name}"
+    # scoring.R expects to find models in models/ subdirectory via relative path
+    # It reads this internally, not via command line args
+    # ln -s \$(realpath ${models_dir}) models
 
-    # Locate scoring script
-    SCORE_R="${scripts_dir}/scoring.R"
-    [[ -f "\$SCORE_R" ]] || { echo "ERROR: scoring.R not found at \$SCORE_R"; ls -la "${scripts_dir}"; exit 1; }
+    # scoring.R reads: input/id_<name>.bed
+    cp ${original_bed} "input/id_${name}.bed"
 
-    # Stage the filesystem layout expected by scoring.R
-    mkdir -p input models "${name}" outdir
+    # Matrix files must be in <name>/ directory with exact names
+    cp ${matrix_main} "${name}/matrix.bed"
+    cp ${matrix_up} "${name}/matrix_100bpup.bed"
+    cp ${matrix_down} "${name}/matrix_100bpdown.bed"
+    
 
-    # input/id_<name>.bed
-    cp "${idbed}" "input/id_${name}.bed"
+    # Snakemake command (line 1078):
+    # Rscript --vanilla scripts/scoring.R {params.name} {input.span} {input.flank_up} {input.flank_down} {input.genome} {output}
+    # Args breakdown:
+    #   args[1] = name (dataset identifier)
+    #   args[2] = span matrix path
+    #   args[3] = flank_up matrix path (actually downstream in Snakemake)
+    #   args[4] = flank_down matrix path (actually upstream in Snakemake)
+    #   args[5] = genome file path
+    #   args[6] = output file path
+    
+    # scoring.R only uses args[1] (name) and args[5] (genome)
+    # args[2-4] and args[6] are documented but the function reads from fixed paths
+    Rscript --vanilla ${scripts_dir}/scoring.R \\
+        "${name}" \\
+        "${matrix_main}" \\
+        "${matrix_down}" \\
+        "${matrix_up}" \\
+        "${genome_file}" \\
+        "${name}.score"
 
-    # matrices (must be exactly these names/paths)
-    cp "${matrix_main}" "${name}/matrix.bed"
-    cp "${matrix_up}"   "${name}/matrix_100bpup.bed"
-    cp "${matrix_down}" "${name}/matrix_100bpdown.bed"
-
-    # models/ must be relative for scoring.R (it does readRDS('models/...'))
-    # Use symlinks to avoid copying huge directories (works on Linux in Nextflow workdir).
-    # If symlinks are an issue on your executor, change to: cp -r ${models_dir}/* models/
-    ln -s ${models_dir}/* models/ 2>/dev/null || true
-
-    # Run scoring
-    # Expected args: name, prefix, threads, outputdir, genome
-    Rscript "\$SCORE_R" "${name}" "${name}" "${threads}" "outdir" "${genome_file}"
-
-    # Normalize outputs to nf-core-like filenames.
-    # We don't know exact filenames produced, so capture the common ones and fail loudly if missing.
-    # Typical outputs in CADD-SV are something like: outdir/<name>.score and outdir/<name>_score_phred
-    if [[ -f "outdir/${name}.score" ]]; then
-      cp "outdir/${name}.score" "${name}_score.bed"
-    elif [[ -f "outdir/${name}_score.bed" ]]; then
-      cp "outdir/${name}_score.bed" "${name}_score.bed"
-    else
-      echo "ERROR: Could not find main score output in outdir/"
-      ls -la outdir
-      exit 1
-    fi
-
-    if [[ -f "outdir/${name}.score_phred" ]]; then
-      cp "outdir/${name}.score_phred" "${name}_score_phred.bed"
-    elif [[ -f "outdir/${name}_score_phred.bed" ]]; then
-      cp "outdir/${name}_score_phred.bed" "${name}_score_phred.bed"
-    elif [[ -f "outdir/${name}.phred" ]]; then
-      cp "outdir/${name}.phred" "${name}_score_phred.bed"
-    else
-      echo "WARNING: Could not find PHRED score output in outdir/; creating empty placeholder"
-      : > "${name}_score_phred.bed"
-    fi
+    # ===== Snakemake rule sort =====
+    # bedtools sort -i {input.score} | cat {input.header} - > {output}
+    bedtools sort -i "output/${name}.score" \\
+        | cat annotations/header_final.txt - \\
+        > "${name}_score.bed"
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        R: \$(R --version | head -n1 | sed 's/.*R version //')
+        R: \$(R --version | head -n1 | sed 's/R version //' | sed 's/ (.*//')
     END_VERSIONS
     """
 }

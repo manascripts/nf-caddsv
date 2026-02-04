@@ -1,5 +1,0 @@
-name: caddsv_idbed
-channels:
-  - conda-forge
-dependencies:
-  - coreutils
