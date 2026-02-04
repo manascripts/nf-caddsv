@@ -11,51 +11,50 @@ include { CADDSV } from './subworkflows/local/caddsv/main'
 
 workflow {
 
-    log.info """
-    ══════════════════════════════════════════════════════════════════════════
-      nf-caddsv : CADD-SV Structural Variant Scoring Pipeline
-    ══════════════════════════════════════════════════════════════════════════
-    Input            : ${params.input}
-    Output           : ${params.outdir}
-    Annotations      : ${params.annotations_dir}
-    Models           : ${params.models_dir}
-    ──────────────────────────────────────────────────────────────────────────
-    """.stripIndent()
+    /*
+     * Validate required params
+     */
+    if( !params.input )           error "Missing required parameter: --input"
+    if( !params.annotations_dir ) error "Missing required parameter: --annotations_dir"
+    if( !params.models_dir )      error "Missing required parameter: --models_dir"
 
-    // Validate
-    if (!params.input)           { error "Please provide --input" }
-    if (!params.annotations_dir) { error "Please provide --annotations_dir" }
-    if (!params.models_dir)      { error "Please provide --models_dir" }
-
-    // Input channel
-    if (params.input.endsWith('.csv')) {
-        ch_sv_bed = Channel
+    /*
+     * Input channel:
+     *  - If CSV: expects columns `sample` and `bed`
+     *  - Else: assume it is a BED file path
+     */
+    ch_sv_bed = params.input.toString().endsWith('.csv')
+        ? Channel
             .fromPath(params.input, checkIfExists: true)
             .splitCsv(header: true)
-            .map { row -> [ [id: row.sample], file(row.bed, checkIfExists: true) ] }
-    } else {
-        ch_sv_bed = Channel
+            .map { row ->
+                def meta = [id: row.sample]
+                def bed = file(row.bed, checkIfExists: true)
+                tuple(meta, bed)
+            }
+        : Channel
             .fromPath(params.input, checkIfExists: true)
-            .map { bed -> [ [id: bed.baseName], bed ] }
-    }
+            .map { bed ->
+                def meta = [id: bed.baseName.replaceAll(/\\.bed\$/, '')]
+                tuple(meta, bed)
+            }
 
     // Reference channels
     ch_annotations = Channel.fromPath(params.annotations_dir, checkIfExists: true, type: 'dir').first()
-    ch_models      = Channel.fromPath(params.models_dir, checkIfExists: true, type: 'dir').first()
-    ch_scripts     = Channel.fromPath("${projectDir}/bin", checkIfExists: true, type: 'dir').first()
+    ch_models      = Channel.fromPath(params.models_dir,      checkIfExists: true, type: 'dir').first()
+    ch_scripts     = Channel.fromPath("${projectDir}/bin",    checkIfExists: true, type: 'dir').first()
     ch_genome      = Channel.fromPath("${projectDir}/assets/caddsv/hg38.genome", checkIfExists: true).first()
-    ch_header      = Channel.fromPath("${projectDir}/assets/caddsv/annotation_header.txt", checkIfExists: true).first()
 
-    // Run pipeline
-    CADDSV (
+    // annotation header expected by score step
+    ch_header = params.annotations_dir 
+        ? Channel.fromPath("${params.annotations_dir}/header.txt", checkIfExists: true).first()
+        : Channel.fromPath("${projectDir}/assets/caddsv/annotation_header.txt", checkIfExists: true).first()
+
+    CADDSV(
         ch_sv_bed,
         ch_annotations,
         ch_models,
         ch_scripts,
-        ch_genome,
-        ch_header
+        ch_genome
     )
-
-    // Output
-    CADDSV.out.scored.view { meta, file -> "Scored: ${meta.id} -> ${file}" }
 }

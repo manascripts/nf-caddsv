@@ -1,0 +1,75 @@
+# yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/subworkflows/yaml-schema.json
+name: "caddsv"
+description: |
+  CADD-SV scoring pipeline for structural variants.
+  Annotates SVs with genomic features and scores them using
+  Random Forest models trained on human/chimpanzee derived alleles.
+keywords:
+  - structural variants
+  - SV
+  - CADD
+  - annotation
+  - scoring
+  - deletions
+  - insertions
+  - duplications
+  - machine learning
+components:
+  - caddsv/prepare_references
+  - caddsv/prepbed
+  - caddsv/annotate
+  - caddsv/score
+input:
+  - ch_sv_bed:
+      type: file
+      description: |
+        Input channel containing structural variant BED files
+        Structure: [ val(meta), path(bed) ]
+      pattern: "*.bed"
+  - ch_annotations_dir:
+      type: directory
+      description: |
+        Directory containing CADD-SV annotation files
+        Structure: path(annotations_dir)
+      pattern: "annotations"
+  - ch_models_dir:
+      type: directory
+      description: |
+        Directory containing pre-trained Random Forest models
+        Structure: path(models_dir)
+      pattern: "models"
+  - ch_scripts_dir:
+      type: directory
+      description: |
+        Directory containing R scripts for annotation and scoring
+        Structure: path(scripts_dir)
+      pattern: "bin"
+  - ch_genome_file:
+      type: file
+      description: |
+        Genome file with chromosome sizes (hg38)
+        Structure: path(genome_file)
+      pattern: "*.genome"
+output:
+  - score:
+      type: file
+      description: |
+        Final scored structural variants with CADD-SV PHRED scores
+        Structure: [ val(meta), path(score_bed) ]
+      pattern: "*_score.bed"
+  - annotated:
+      type: file
+      description: |
+        Annotation matrix for main SV span
+        Structure: [ val(meta), path(annotated_tsv) ]
+      pattern: "*_annotated.tsv"
+  - versions:
+      type: file
+      description: |
+        File containing software versions
+        Structure: [ path(versions.yml) ]
+      pattern: "versions.yml"
+authors:
+  - "@manascripts"
+maintainers:
+  - "@manascripts"

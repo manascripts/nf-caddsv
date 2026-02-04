@@ -1,0 +1,300 @@
+# nf-caddsv
+
+[![Nextflow](https://img.shields.io/badge/nextflow%20DSL2-%E2%89%A523.04.0-23aa62.svg)](https://www.nextflow.io/)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+
+## Overview
+
+**nf-caddsv** is a Nextflow DSL2 port of [CADD-SV](https://github.com/kircherlab/CADD-SV), a framework to score the effect of structural variants in the human genome.
+
+CADD-SV retrieves a wide set of annotations in the range and vicinity of a structural variant (SV), computes summary statistics, and uses trained machine learning models to differentiate deleterious from neutral variants. The method uses human and chimpanzee derived alleles as proxy-neutral and contrasts them with matched simulated variants as proxy-pathogenic.
+
+> **Note**: This is a Nextflow port of the original Snakemake implementation. All computational logic, models, and annotations are from the original CADD-SV authors. This port aims to provide nf-core compatible infrastructure for easier integration into existing Nextflow pipelines.
+
+
+## Original Publication & Credits
+
+CADD-SV was developed by the [Kircher Lab](https://kircherlab.bihealth.org/) at the Berlin Institute of Health.
+
+**Original Implementation:**
+- **Repository**: https://github.com/kircherlab/CADD-SV
+- **Web Service**: https://cadd-sv.bihealth.org/
+- **Annotations Download**: https://kircherlab.bihealth.org/download/CADD-SV/
+
+**Citation:**
+If you use this pipeline, please cite the original CADD-SV publication:
+
+> Kleinert P, Kircher M. **CADD-SV – a framework to score the effects of structural variants in health and disease.** 
+> Genome Medicine (2022). https://doi.org/10.1186/s13073-022-01039-1
+
+---
+
+## Requirements
+
+- **Nextflow** >= 25.04.7
+- **Container engine**: Docker or Singularity (recommended for HPC)
+- **Disk space**: ~15GB for annotations (downloaded automatically on first run)
+
+## Installation
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/your-username/nf-caddsv.git
+cd nf-caddsv
+```
+
+### 2. Install Nextflow (if not already installed)
+
+```bash
+# Using conda
+conda install -c bioconda nextflow
+
+# Or using curl
+curl -s https://get.nextflow.io | bash
+```
+
+### 3. Test the installation
+
+```bash
+nextflow run main.nf --help
+```
+
+## Quick Start
+
+### Basic Usage
+
+```bash
+nextflow run main.nf \
+    --input /path/to/your_svs.bed \
+    --outdir ./results \
+    -profile singularity
+```
+
+### With Pre-downloaded Annotations
+
+If you already have the CADD-SV annotations downloaded:
+
+```bash
+nextflow run main.nf \
+    --input /path/to/your_svs.bed \
+    --annotations_dir /path/to/annotations \
+    --models_dir /path/to/models \
+    --outdir ./results \
+    -profile singularity
+```
+
+### Using Docker
+
+```bash
+nextflow run main.nf \
+    --input /path/to/your_svs.bed \
+    --outdir ./results \
+    -profile docker
+```
+
+
+## Input Format
+
+Input must be a **BED file** with structural variants in **GRCh38/hg38** coordinates.
+
+### Required Columns
+
+| Column | Description | Example |
+|--------|-------------|---------|
+| 1 | Chromosome (with `chr` prefix) | chr1 |
+| 2 | Start position (0-based) | 821713 |
+| 3 | End position | 3928354 |
+| 4 | SV Type | DEL, INS, or DUP |
+
+### Example Input
+
+```
+chr1    821713    3928354   DUP
+chr1    1000000   1010000   DEL
+chr2    5000000   5000500   INS
+chr7    55000000  55100000  DEL
+chr17   7500000   7600000   DUP
+```
+
+### Supported SV Types
+
+| Type | Description |
+|------|-------------|
+| `DEL` | Deletion |
+| `INS` | Insertion |
+| `DUP` | Duplication |
+
+> **Note**: The input file should be coordinate-sorted. The pipeline will sort it automatically, but pre-sorted input is recommended.
+
+
+
+## Parameters
+
+### Required Parameters
+
+| Parameter | Description |
+|-----------|-------------|
+| `--input` | Path to input BED file with SVs |
+
+### Optional Parameters
+
+| Parameter | Default | Description |
+|-----------|---------|-------------|
+| `--outdir` | `./results` | Output directory |
+| `--annotations_dir` | `null` | Path to pre-downloaded annotations |
+| `--models_dir` | `null` | Path to pre-downloaded models |
+
+
+## Output
+
+The pipeline produces the following outputs in the specified `--outdir`:
+
+```
+results/
+├── scored/
+│   └── {sample}_score.bed          # Final scored SVs
+├── annotated/
+│   ├── {sample}_annotated.tsv      # Main span annotations
+│   ├── {sample}_100bpup_annotated.tsv   # Upstream flank annotations
+│   └── {sample}_100bpdown_annotated.tsv # Downstream flank annotations
+├── caddsv_references/              # Downloaded references (if applicable)
+│   ├── annotations/
+│   └── models/
+└── pipeline_info/
+    └── versions.yml
+```
+
+## Pipeline Steps
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                        nf-caddsv Pipeline                       │
+└─────────────────────────────────────────────────────────────────┘
+                              │
+                              ▼
+              ┌───────────────────────────────┐
+              │  CADDSV_PREPARE_REFERENCES    │  (optional)
+              │  Download annotations/models  │
+              └───────────────────────────────┘
+                              │
+                              ▼
+              ┌───────────────────────────────┐
+              │       CADDSV_PREPBED          │
+              │  Sort & prepare BED files     │
+              │  - Main span                  │
+              │  - 100bp upstream flank       │
+              │  - 100bp downstream flank     │
+              └───────────────────────────────┘
+                              │
+          ┌───────────────────┼───────────────────┐
+          ▼                   ▼                   ▼
+┌─────────────────┐ ┌─────────────────┐ ┌─────────────────┐
+│ ANNOTATE_MAIN   │ │ ANNOTATE_UP     │ │ ANNOTATE_DOWN   │
+│ Main SV span    │ │ Upstream 100bp  │ │ Downstream 100bp│
+└─────────────────┘ └─────────────────┘ └─────────────────┘
+          │                   │                   │
+          └───────────────────┼───────────────────┘
+                              │
+                              ▼
+              ┌───────────────────────────────┐
+              │        CADDSV_SCORE           │
+              │  Random Forest prediction     │
+              │  PHRED score calculation      │
+              └───────────────────────────────┘
+                              │
+                              ▼
+              ┌───────────────────────────────┐
+              │         Final Output          │
+              │    Scored & sorted BED        │
+              └───────────────────────────────┘
+```
+
+## Converting Input Formats
+
+### VCF to BED
+
+Use [SURVIVOR](https://github.com/fritzsedlazeck/SURVIVOR) to convert VCF to BED:
+
+```bash
+# Install SURVIVOR
+conda install -c bioconda survivor
+
+# Convert VCF to BED
+SURVIVOR vcftobed input.vcf 0 -1 output.bed
+
+# Extract required columns (chr, start, end, type)
+awk 'BEGIN{OFS="\t"} {print $1, $2, $6, $11}' output.bed > final_input.bed
+```
+
+### Lift-over from hg19 to GRCh38
+
+```bash
+# Install liftOver
+conda install -c bioconda ucsc-liftover
+
+# Download chain file
+wget https://hgdownload.cse.ucsc.edu/goldenpath/hg19/liftOver/hg19ToHg38.over.chain.gz
+
+# Perform lift-over
+liftOver input_hg19.bed hg19ToHg38.over.chain.gz output_hg38.bed unmapped.bed
+```
+
+
+## Pre-downloading Annotations
+
+For offline use or to avoid repeated downloads:
+
+```bash
+# Download annotations (~15GB)
+wget https://kircherlab.bihealth.org/download/CADD-SV/v1.1/dependencies.tar.gz
+tar -xzf dependencies.tar.gz
+
+# Clone models from GitHub
+git clone https://github.com/kircherlab/CADD-SV.git
+cp -r CADD-SV/models .
+
+# Run with pre-downloaded references
+nextflow run main.nf \
+    --input your_svs.bed \
+    --annotations_dir ./annotations \
+    --models_dir ./models \
+    --skip_prepare_references \
+    -profile singularity
+```
+
+## Testing
+
+Run the test dataset:
+
+```bash
+nextflow run main.nf \
+    --input test/data/test_svs.bed \
+    --outdir test/results \
+    -profile singularity,test
+```
+
+## Contributing
+
+Contributions are welcome! Please:
+
+1. Fork the repository
+2. Create a feature branch
+3. Submit a pull request
+
+
+## License
+
+The original CADD-SV is subject to its own licensing terms. Please refer to the [original repository](https://github.com/kircherlab/CADD-SV) for details.
+
+
+## Support
+
+- **Original CADD-SV issues**: https://github.com/kircherlab/CADD-SV/issues
+- **This Nextflow port issues**: [Open an issue](../../issues)
+
+
+## Acknowledgments
+
+- **Original CADD-SV authors**: Philip Kleinert and Martin Kircher at the Kircher Lab, Berlin Institute of Health
+- **nf-core community**: For workflow standards and best practices

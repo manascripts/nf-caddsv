@@ -6,12 +6,12 @@ export PATH=$PATH:/omics/odcf/analysis/OE0415_projects/nb_lrs/LRS/2025-02-01_NB_
 cd "$(dirname "$0")"
 
 # Verify references exist
-if [ ! -d "caddsv_references/annotations" ]; then
+if [ ! -d "./results/caddsv_references/annotations" ]; then
     echo "ERROR: Annotations not found. Run ./run_test_download.sh first"
     exit 1
 fi
 
-if [ ! -d "caddsv_references/models" ]; then
+if [ ! -d "./results/caddsv_references/models" ]; then
     echo "ERROR: Models not found. Run ./run_test_download.sh first"
     exit 1
 fi
@@ -19,8 +19,7 @@ fi
 nextflow run main.nf \
     -profile singularity \
     --input test/data/test_svs.bed \
-    --annotations_dir ./caddsv_references/annotations \
-    --models_dir ./caddsv_references/models \
-    --outdir test/results \
-    -resume
+    --annotations_dir ./results/caddsv_references/annotations \
+    --models_dir ./results/caddsv_references/models \
+    --outdir test/results
 

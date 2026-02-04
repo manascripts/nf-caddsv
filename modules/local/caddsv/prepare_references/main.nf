@@ -53,7 +53,7 @@ process CADDSV_PREPARE_REFERENCES {
 
     cat <<-END_VERSIONS > versions.yml
     "${task.process}":
-        tag: "\$TAG"
+        CADDSV annotations version : "\$TAG"
     END_VERSIONS
     """
 }
