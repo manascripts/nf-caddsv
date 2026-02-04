@@ -1,44 +1,68 @@
 # yaml-language-server: $schema=https://raw.githubusercontent.com/nf-core/modules/master/subworkflows/yaml-schema.json
 name: "caddsv"
-## TODO nf-core: Add a description of the subworkflow and list keywords
-description: Sort SAM/BAM/CRAM file
+description: |
+  CADD-SV scoring pipeline for structural variants.
+  Annotates SVs with genomic features and scores them using
+  Random Forest models trained on human/chimpanzee derived alleles.
 keywords:
-  - sort
-  - bam
-  - sam
-  - cram
-## TODO nf-core: Add a list of the modules and/or subworkflows used in the subworkflow
+  - structural variants
+  - SV
+  - CADD
+  - annotation
+  - scoring
+  - deletions
+  - insertions
+  - duplications
+  - machine learning
 components:
-  - samtools/sort
-  - samtools/index
-## TODO nf-core: List all of the channels used as input with a description and their structure
+  - caddsv/prepare_references
+  - caddsv/prepbed
+  - caddsv/annotate
+  - caddsv/score
 input:
-  - ch_bam:
+  - ch_sv_bed:
       type: file
       description: |
-        The input channel containing the BAM/CRAM/SAM files
-        Structure: [ val(meta), path(bam) ]
-      pattern: "*.{bam/cram/sam}"
-## TODO nf-core: List all of the channels used as output with a descriptions and their structure
+        Input channel containing structural variant BED files
+        Structure: [ val(meta), path(bed) ]
+      pattern: "*.bed"
+  - ch_annotations_dir:
+      type: directory
+      description: |
+        Directory containing CADD-SV annotation files
+        Structure: path(annotations_dir)
+      pattern: "annotations"
+  - ch_models_dir:
+      type: directory
+      description: |
+        Directory containing pre-trained Random Forest models
+        Structure: path(models_dir)
+      pattern: "models"
+  - ch_scripts_dir:
+      type: directory
+      description: |
+        Directory containing R scripts for annotation and scoring
+        Structure: path(scripts_dir)
+      pattern: "bin"
+  - ch_genome_file:
+      type: file
+      description: |
+        Genome file with chromosome sizes (hg38)
+        Structure: path(genome_file)
+      pattern: "*.genome"
 output:
-  - bam:
+  - score:
       type: file
       description: |
-        Channel containing BAM files
-        Structure: [ val(meta), path(bam) ]
-      pattern: "*.bam"
-  - bai:
+        Final scored structural variants with CADD-SV PHRED scores
+        Structure: [ val(meta), path(score_bed) ]
+      pattern: "*_score.bed"
+  - annotated:
       type: file
       description: |
-        Channel containing indexed BAM (BAI) files
-        Structure: [ val(meta), path(bai) ]
-      pattern: "*.bai"
-  - csi:
-      type: file
-      description: |
-        Channel containing CSI files
-        Structure: [ val(meta), path(csi) ]
-      pattern: "*.csi"
+        Annotation matrix for main SV span
+        Structure: [ val(meta), path(annotated_tsv) ]
+      pattern: "*_annotated.tsv"
   - versions:
       type: file
       description: |

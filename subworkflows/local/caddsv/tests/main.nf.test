@@ -1,5 +1,3 @@
-// TODO nf-core: Once you have added the required tests, please run the following command to build this file:
-// nf-core subworkflows test caddsv
 nextflow_workflow {
 
     name "Test Subworkflow CADDSV"
@@ -7,39 +5,176 @@ nextflow_workflow {
     workflow "CADDSV"
 
     tag "subworkflows"
-    tag "subworkflows_"
+    tag "subworkflows_local"
     tag "subworkflows/caddsv"
-    // TODO nf-core: Add tags for all modules used within this subworkflow. Example:
-    tag "samtools"
-    tag "samtools/sort"
-    tag "samtools/index"
+    tag "caddsv"
+    tag "caddsv/prepbed"
+    tag "caddsv/annotate"
+    tag "caddsv/score"
 
-
-    // TODO nf-core: Change the test name preferably indicating the test-data and file-format used
-    test("sarscov2 - bam - single_end") {
+    test("structural_variants - bed - hg38") {
 
         when {
+            params {
+                skip_prepare_references = true
+            }
             workflow {
                 """
-                // TODO nf-core: define inputs of the workflow here. Example:
-                input[0] = [
-                    [ id:'test', single_end:false ], // meta map
-                    file(params.modules_testdata_base_path + 'genomics/sarscov2/illumina/bam/test.paired_end.sorted.bam', checkIfExists: true),
-                ]
-                input[1] = [
-                    [ id:'genome' ],
-                    file(params.modules_testdata_base_path + 'genomics/sarscov2/illumina/bam/test.paired_end.sorted.bam', checkIfExists: true),
-                ]
+                // Input SV BED file
+                input[0] = Channel.of([
+                    [ id: 'test_svs' ],
+                    file("${projectDir}/test/data/test_svs.bed", checkIfExists: true)
+                ])
+                
+                // Annotations directory
+                input[1] = Channel.fromPath(
+                    "${projectDir}/results/caddsv_references/annotations",
+                    checkIfExists: true,
+                    type: 'dir'
+                ).first()
+                
+                // Models directory
+                input[2] = Channel.fromPath(
+                    "${projectDir}/results/caddsv_references/models",
+                    checkIfExists: true,
+                    type: 'dir'
+                ).first()
+                
+                // Scripts directory
+                input[3] = Channel.fromPath(
+                    "${projectDir}/bin",
+                    checkIfExists: true,
+                    type: 'dir'
+                ).first()
+                
+                // Genome file
+                input[4] = Channel.fromPath(
+                    "${projectDir}/assets/caddsv/hg38.genome",
+                    checkIfExists: true
+                ).first()
                 """
             }
         }
+
         then {
-            assert workflow.success
             assertAll(
-                { assert snapshot(
-                    workflow.out
-                    //TODO nf-core: Add all required assertions to verify the test output.
-                ).match() }
+                { assert workflow.success },
+                { assert workflow.out.score },
+                { assert workflow.out.annotated },
+                { assert workflow.out.versions },
+                // Check score output exists and has content
+                { assert workflow.out.score.get(0).get(1).exists() },
+                // Check score file has expected columns (at least chr, start, end, type, name, PHRED)
+                { assert path(workflow.out.score.get(0).get(1)).readLines().size() > 0 }
+            )
+        }
+    }
+
+    test("structural_variants - bed - single_variant") {
+
+        when {
+            params {
+                skip_prepare_references = true
+            }
+            workflow {
+                """
+                // Create a single-variant test file
+                def testBed = file("${workDir}/single_sv.bed")
+                testBed.text = "chr1\\t1000000\\t1010000\\tDEL\\ttest_del\\n"
+                
+                input[0] = Channel.of([
+                    [ id: 'single_sv' ],
+                    testBed
+                ])
+                
+                input[1] = Channel.fromPath(
+                    "${projectDir}/results/caddsv_references/annotations",
+                    checkIfExists: true,
+                    type: 'dir'
+                ).first()
+                
+                input[2] = Channel.fromPath(
+                    "${projectDir}/results/caddsv_references/models",
+                    checkIfExists: true,
+                    type: 'dir'
+                ).first()
+                
+                input[3] = Channel.fromPath(
+                    "${projectDir}/bin",
+                    checkIfExists: true,
+                    type: 'dir'
+                ).first()
+                
+                input[4] = Channel.fromPath(
+                    "${projectDir}/assets/caddsv/hg38.genome",
+                    checkIfExists: true
+                ).first()
+                """
+            }
+        }
+
+        then {
+            assertAll(
+                { assert workflow.success },
+                { assert workflow.out.score },
+                // Single variant should produce single output line (plus header)
+                { assert path(workflow.out.score.get(0).get(1)).readLines().size() >= 1 }
+            )
+        }
+    }
+
+    test("structural_variants - bed - all_sv_types") {
+
+        when {
+            params {
+                skip_prepare_references = true
+            }
+            workflow {
+                """
+                // Create test file with all SV types
+                def testBed = file("${workDir}/all_types.bed")
+                testBed.text = '''chr1\\t1000000\\t1010000\\tDEL\\ttest_del
+chr2\\t2000000\\t2000500\\tINS\\ttest_ins
+chr3\\t3000000\\t3100000\\tDUP\\ttest_dup
+'''
+                
+                input[0] = Channel.of([
+                    [ id: 'all_types' ],
+                    testBed
+                ])
+                
+                input[1] = Channel.fromPath(
+                    "${projectDir}/results/caddsv_references/annotations",
+                    checkIfExists: true,
+                    type: 'dir'
+                ).first()
+                
+                input[2] = Channel.fromPath(
+                    "${projectDir}/results/caddsv_references/models",
+                    checkIfExists: true,
+                    type: 'dir'
+                ).first()
+                
+                input[3] = Channel.fromPath(
+                    "${projectDir}/bin",
+                    checkIfExists: true,
+                    type: 'dir'
+                ).first()
+                
+                input[4] = Channel.fromPath(
+                    "${projectDir}/assets/caddsv/hg38.genome",
+                    checkIfExists: true
+                ).first()
+                """
+            }
+        }
+
+        then {
+            assertAll(
+                { assert workflow.success },
+                { assert workflow.out.score },
+                // Should have 3 variants scored
+                { assert path(workflow.out.score.get(0).get(1)).readLines().findAll { !it.startsWith('#') }.size() == 3 }
             )
         }
     }
