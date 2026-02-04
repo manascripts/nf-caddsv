@@ -4,6 +4,3 @@ work/
 results/
 test/results/
 .DS_Store
-*.smk
-*.sh
-_download.nf
