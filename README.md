@@ -294,7 +294,6 @@ The original CADD-SV is subject to its own licensing terms. Please refer to the 
 - **This Nextflow port issues**: [Open an issue](../../issues)
 
 
-
 ## Acknowledgments
 
 - **Original CADD-SV authors**: Philip Kleinert and Martin Kircher at the Kircher Lab, Berlin Institute of Health
